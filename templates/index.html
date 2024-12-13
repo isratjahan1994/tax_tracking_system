@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payments Management</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .form-container, .summary-container {
+            margin: 20px 0;
+        }
+
+        .scrollable {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 2px solid #ccc;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 5;
+        }
+
+        .popup.active, .overlay.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Form Section -->
+    <div class="form-container">
+        <h2>Payments Form</h2>
+        <form id="paymentForm">
+            <label for="company">Company:</label>
+            <input type="text" id="company" name="company" required><br><br>
+
+            <label for="amount">Amount:</label>
+            <input type="number" id="amount" name="amount" step="0.01" required><br><br>
+
+            <label for="paymentDate">Payment Date:</label>
+            <input type="date" id="paymentDate" name="paymentDate"><br><br>
+
+            <label for="status">Status:</label>
+            <select id="status" name="status">
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+            </select><br><br>
+
+            <label for="dueDate">Due Date:</label>
+            <select id="dueDate" name="dueDate" required></select><br><br>
+
+            <label for="taxRate">Tax Rate:</label>
+            <input type="number" id="taxRate" name="taxRate" step="0.01" placeholder="e.g., 0.06"><br><br>
+
+            <button type="button" onclick="savePayment()">Save</button>
+        </form>
+    </div>
+
+    <!-- Payments Table -->
+    <div class="scrollable">
+        <h2>Payments Data Table</h2>
+        <table id="dataTable">
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Company</th>
+                <th>Amount</th>
+                <th>Payment Date</th>
+                <th>Status</th>
+                <th>Due Date</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <!-- Data will be populated dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Summary Section -->
+    <div class="summary-container">
+        <h2>Tax Table</h2>
+        <select id="filterDueDate" onchange="filterByDueDate()"></select>
+        <div class="scrollable">
+            <table id="summaryTable">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Company</th>
+                    <th>Amount</th>
+                    <th>Payment Date</th>
+                    <th>Status</th>
+                    <th>Due Date</th>
+                </tr>
+                </thead>
+                <tbody>
+                <!-- Filtered data will be populated dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Popup for Confirmations -->
+<div class="overlay" id="overlay"></div>
+<div class="popup" id="confirmationPopup">
+    <p>Are you sure you want to delete this record?</p>
+    <button onclick="confirmDelete()">Yes</button>
+    <button onclick="closePopup()">No</button>
+</div>
+
+<script>
+    const payments = [];
+    let currentId = 1;
+    let deleteId = null;
+
+    // Generate dropdown options dynamically
+    function generateDueDateOptions() {
+        const dropdown = document.getElementById('dueDate');
+        const filterDropdown = document.getElementById('filterDueDate');
+        const currentYear = new Date().getFullYear();
+        const dates = [
+            { month: 'April', day: 15 },
+            { month: 'June', day: 15 },
+            { month: 'September', day: 15 },
+            { month: 'January', day: 15, nextYear: true }
+        ];
+        dropdown.innerHTML = '';
+        filterDropdown.innerHTML = '';
+
+        dates.forEach(date => {
+            const year = date.nextYear ? currentYear + 1 : currentYear;
+            const value = `${date.month} 15, ${year}`;
+            const option = `<option value="${value}">${value}</option>`;
+            dropdown.innerHTML += option;
+            filterDropdown.innerHTML += option;
+        });
+    }
+
+    // Save a payment
+    function savePayment() {
+        const form = document.getElementById('paymentForm');
+        const company = form.company.value;
+        const amount = parseFloat(form.amount.value);
+        const paymentDate = form.paymentDate.value || 'NA';
+        const status = form.status.value;
+        const dueDate = form.dueDate.value;
+
+        if (!dueDate) {
+            alert('Due Date is mandatory!');
+            return;
+        }
+
+        payments.push({ id: currentId++, company, amount, paymentDate, status, dueDate });
+        form.reset();
+        renderTable();
+    }
+
+    // Render the main table
+    function renderTable() {
+        const tableBody = document.getElementById('dataTable').querySelector('tbody');
+        tableBody.innerHTML = '';
+
+        payments.forEach(payment => {
+            const row = `
+                <tr>
+                    <td>${payment.id}</td>
+                    <td>${payment.company}</td>
+                    <td>${payment.amount.toFixed(2)}</td>
+                    <td>${payment.paymentDate}</td>
+                    <td>${payment.status}</td>
+                    <td>${payment.dueDate}</td>
+                    <td>
+                        <button onclick="deletePayment(${payment.id})">Delete</button>
+                    </td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    }
+
+    // Filter by Due Date
+    function filterByDueDate() {
+        const filterValue = document.getElementById('filterDueDate').value;
+        const filteredPayments = payments.filter(payment => payment.dueDate === filterValue);
+
+        const summaryTable = document.getElementById('summaryTable').querySelector('tbody');
+        summaryTable.innerHTML = '';
+
+        let totalAmount = 0;
+
+        filteredPayments.forEach(payment => {
+            totalAmount += payment.amount;
+            const row = `
+                <tr>
+                    <td>${payment.id}</td>
+                    <td>${payment.company}</td>
+                    <td>${payment.amount.toFixed(2)}</td>
+                    <td>${payment.paymentDate}</td>
+                    <td>${payment.status}</td>
+                    <td>${payment.dueDate}</td>
+                </tr>
+            `;
+            summaryTable.innerHTML += row;
+        });
+
+        if (filteredPayments.length > 0) {
+            const taxRate = parseFloat(document.getElementById('taxRate').value || 0);
+            const taxDue = totalAmount * taxRate;
+
+            const summaryRow = `
+                <tr>
+                    <td colspan="2"><strong>Total Amount:</strong></td>
+                    <td><strong>${totalAmount.toFixed(2)}</strong></td>
+                    <td colspan="3"></td>
+                </tr>
+                <tr>
+                    <td colspan="2"><strong>Tax Rate:</strong></td>
+                    <td><strong>${(taxRate * 100).toFixed(2)}%</strong></td>
+                    <td colspan="3"></td>
+                </tr>
+                <tr>
+                    <td colspan="2"><strong>Tax Due:</strong></td>
+                    <td><strong>${taxDue.toFixed(2)}</strong></td>
+                    <td colspan="3"></td>
+                </tr>
+            `;
+            summaryTable.innerHTML += summaryRow;
+        }
+    }
+
+    // Delete a payment
+    function deletePayment(id) {
+        deleteId = id;
+        document.getElementById('overlay').classList.add('active');
+        document.getElementById('confirmationPopup').classList.add('active');
+    }
+
+    function confirmDelete() {
+        const index = payments.findIndex(payment => payment.id === deleteId);
+        if (index > -1) {
+            payments.splice(index, 1);
+        }
+        deleteId = null;
+        closePopup();
+        renderTable();
+    }
+
+    function closePopup() {
+        document.getElementById('overlay').classList.remove('active');
+        document.getElementById('confirmationPopup').classList.remove('active');
+    }
+
+    // Initialize
+    generateDueDateOptions();
+</script>
+</body>
+</html>
